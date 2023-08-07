@@ -20,7 +20,7 @@ public interface LemmaRepository extends JpaRepository<LemmaModel, Integer> {
     Optional<List<LemmaModel>> getAll();
 
     @Query(value = "SELECT * FROM lemmas WHERE lemma = :lemma", nativeQuery = true)
-    Optional<Object> getByLemma(String lemma);
+    Optional<LemmaModel> getByLemma(String lemma);
 
     @Transactional
     @Modifying

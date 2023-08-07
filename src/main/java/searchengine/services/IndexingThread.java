@@ -23,9 +23,10 @@ import java.util.TreeSet;
 import java.util.concurrent.ForkJoinTask;
 import java.util.concurrent.RecursiveTask;
 
-@Service
 @AllArgsConstructor
 public class IndexingThread extends RecursiveTask<IndexingResponse> {
+
+    private final SiteModel siteModel;
 
     private final Site site;
 
@@ -40,25 +41,21 @@ public class IndexingThread extends RecursiveTask<IndexingResponse> {
         long start = System.currentTimeMillis();
         Connection.Response response;
         try {
-            if (ifIndexing()) {
-                SiteModel siteModel = siteRepository.getSiteIdByURL(site.getUrl()).get();
-                List<IndexingThread> tasks = new ArrayList<>();
-                System.out.println("Site name: " + site.getName() + "\nLink: " + site.getUrl());
-                response = Jsoup.connect(site.getUrl())
-                        .timeout(3000)
-                        .execute();
-                Document doc = response.parse();
-                Elements aTag = doc.getElementsByTag("a");
-                int statusCode = response.statusCode();
-                List<String> hrefs = new ArrayList<>();
-                aTag.forEach(link -> hrefs.add(link.attr("href")));
-                saveToDB(doc, statusCode, siteModel, site.getUrl());
-                iterateLinks(hrefs, siteModel, tasks);
-                tasks.forEach(ForkJoinTask::join);
-                return ifSucceeded(start);
-            } else {
-                return new IndexingResponse(false, "Индексация уже запущена");
+            List<IndexingThread> tasks = new ArrayList<>();
+            response = Jsoup.connect(site.getUrl())
+                    .timeout(3000)
+                    .execute();
+            Document doc = response.parse();
+            Elements aTag = doc.getElementsByTag("a");
+            int statusCode = response.statusCode();
+            List<String> hrefs = new ArrayList<>();
+            aTag.forEach(link -> hrefs.add(link.attr("href")));
+            if (!checkIfContains(site.getUrl().substring(siteModel.getUrl().length()))) {
+                saveToDB(doc, statusCode, site.getUrl());
             }
+            iterateLinks(hrefs, tasks);
+            tasks.forEach(ForkJoinTask::join);
+            return ifSucceeded(start);
         } catch (IOException e) {
             siteRepository.changeStatusByUrl(site.getUrl(), Status.FAILED.name());
             System.err.println(e.getMessage());
@@ -66,54 +63,58 @@ public class IndexingThread extends RecursiveTask<IndexingResponse> {
         }
     }
 
-    private boolean ifIndexing() {
-        if (siteRepository.getSiteIdByURL(site.getUrl()).isPresent()) {
-            return siteRepository.getSiteIdByURL(site.getUrl()).get().getStatus().equals(Status.INDEXING);
-        }
-        return false;
-    }
-
-    private void saveToDB(Document doc, int statusCode, SiteModel siteModel, String link) {
-        PageModel page = buildPage(doc, statusCode, link, siteModel);
+    private void saveToDB(Document doc, int statusCode, String link) {
+        PageModel page = buildPage(doc, statusCode, link);
         pageRepository.save(page);
-        lemmaServiceImpl.buildLemmas(page.getContent(), siteModel);
+        lemmaServiceImpl.buildLemmas(page.getContent(), page, siteModel);
         siteRepository.updateDateTime(siteModel.getId(), LocalDateTime.now());
     }
 
-    private void iterateLinks(List<String> hrefs, SiteModel siteModel, List<IndexingThread> tasks) {
-        for (String link : hrefs) {
-            if (!link.isEmpty()) {
-                if (checkIfContains(link, siteModel)) {
-                    continue;
-                }
-                indexPageAndLemmas(tasks, link);
+    private void iterateLinks(List<String> hrefs, List<IndexingThread> tasks) {
+        for (String link : filterHrefs(hrefs)) {
+            if (checkIfContains(link)) {
+                continue;
             }
+            indexPageAndLemmas(tasks, link);
         }
     }
 
-    private boolean checkIfContains(String link, SiteModel siteModel) {
+    private List<String> filterHrefs(List<String> hrefs) {
+        List<String> filtered = new ArrayList<>();
+        for (String l : hrefs) {
+            if (l.startsWith("/")) {
+                filtered.add(l);
+            }
+        }
+        return filtered;
+    }
+
+    private boolean checkIfContains(String link) {
         return pageRepository.getByPathAndId(link, siteModel.getId()).isPresent();
     }
 
     private String ifStartsWithSlash(String link) {
-        return link.startsWith("/") ? site.getUrl() + link : link;
+        return link.startsWith("/")  && link.length() > 1 ? siteModel.getUrl() + link : link;
     }
 
     private void indexPageAndLemmas(List<IndexingThread> tasks, String link) {
         Site site = new Site();
         site.setName(Thread.currentThread().getName());
         site.setUrl(ifStartsWithSlash(link));
-        System.err.println(site);
-        IndexingThread indexingThread = new IndexingThread(site, pageRepository, siteRepository, lemmaServiceImpl);
+        IndexingThread indexingThread = new IndexingThread(siteModel, site, pageRepository, siteRepository, lemmaServiceImpl);
         indexingThread.fork();
         tasks.add(indexingThread);
     }
 
-    private PageModel buildPage(Document doc, int status, String path, SiteModel siteModel) {
+    private PageModel buildPage(Document doc, int status, String path) {
         PageModel pageModel = new PageModel();
         pageModel.setCode(status);
         pageModel.setContent(doc.html());
-        pageModel.setPath(path);
+        if (path.equals("/")) {
+            pageModel.setPath(path);
+        } else {
+            pageModel.setPath(path.substring(siteModel.getUrl().length()));
+        }
         pageModel.setSiteModel(siteModel);
         return pageModel;
     }

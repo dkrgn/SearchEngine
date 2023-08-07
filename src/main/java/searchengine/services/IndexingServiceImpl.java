@@ -35,9 +35,13 @@ public class IndexingServiceImpl implements IndexingService {
     public IndexingResponse startIndex() {
         List<IndexingThread> threads = new ArrayList<>();
         for (Site site : sitesList.getSites()) {
+            if (checkIfIndexing(site)) {
+                return new IndexingResponse(false, "Индексация уже запущена");
+            }
             deleteFromDB(site);
             addSite(site);
-            IndexingThread thread = new IndexingThread(site, pageRepository, siteRepository, lemmaServiceImpl);
+            SiteModel siteModel = siteRepository.getSiteIdByURL(site.getUrl()).get();
+            IndexingThread thread = new IndexingThread(siteModel, site, pageRepository, siteRepository, lemmaServiceImpl);
             threads.add(thread);
         }
         threads.forEach(pool::execute);
@@ -68,9 +72,13 @@ public class IndexingServiceImpl implements IndexingService {
             }
         }
         if (checkIfInConfig) {
+            if (checkIfIndexing(site)) {
+                return new IndexingResponse(false, "Индексация уже запущена");
+            }
             deleteFromDB(site);
             addSite(site);
-            IndexingThread thread = new IndexingThread(site, pageRepository, siteRepository, lemmaServiceImpl);
+            SiteModel siteModel = siteRepository.getSiteIdByURL(site.getUrl()).get();
+            IndexingThread thread = new IndexingThread(siteModel, site, pageRepository, siteRepository, lemmaServiceImpl);
             pool.execute(thread);
             indexing = true;
             return new IndexingResponse(true);
@@ -78,6 +86,13 @@ public class IndexingServiceImpl implements IndexingService {
         return new IndexingResponse(false,
                 "Данная страница находится за пределами сайтов, " +
                         "указанных в конфигурационном файле.");
+    }
+
+    private boolean checkIfIndexing(Site site) {
+        if (siteRepository.getSiteIdByURL(site.getUrl()).isPresent()) {
+             return siteRepository.getSiteIdByURL(site.getUrl()).get().getStatus().equals(Status.INDEXING);
+        }
+        return false;
     }
 
     private void addSite(Site site) {
