@@ -2,10 +2,10 @@ package searchengine.services;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import searchengine.config.Site;
+import searchengine.config.SiteConfig;
 import searchengine.config.SitesList;
 import searchengine.dto.statistics.IndexingResponse;
-import searchengine.model.SiteModel;
+import searchengine.model.Site;
 import searchengine.model.Status;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
@@ -34,14 +34,14 @@ public class IndexingServiceImpl implements IndexingService {
     @Override
     public IndexingResponse startIndex() {
         List<IndexingThread> threads = new ArrayList<>();
-        for (Site site : sitesList.getSites()) {
-            if (checkIfIndexing(site)) {
+        for (SiteConfig siteConfig : sitesList.getSiteConfigs()) {
+            if (checkIfIndexing(siteConfig.getUrl())) {
                 return new IndexingResponse(false, "Индексация уже запущена");
             }
-            deleteFromDB(site);
-            addSite(site);
-            SiteModel siteModel = siteRepository.getSiteIdByURL(site.getUrl()).get();
-            IndexingThread thread = new IndexingThread(siteModel, site, pageRepository, siteRepository, lemmaServiceImpl);
+            deleteFromDB(siteConfig);
+            addSite(siteConfig);
+            Site site = siteRepository.getSiteIdByURL(siteConfig.getUrl()).get();
+            IndexingThread thread = new IndexingThread(site, siteConfig.getUrl(), pageRepository, siteRepository, lemmaServiceImpl);
             threads.add(thread);
         }
         threads.forEach(pool::execute);
@@ -52,10 +52,10 @@ public class IndexingServiceImpl implements IndexingService {
     @Override
     public IndexingResponse stopIndex() {
         if (!indexing) {
-            return new IndexingResponse(false, "Индексация не запущена");
+            return new IndexingResponse(false, "Индексация уже запущена");
         }
         pool.shutdown();
-        sitesList.getSites().forEach(
+        sitesList.getSiteConfigs().forEach(
                 s -> siteRepository.changeStatusByUrl(s.getUrl(), Status.FAILED.name()));
         indexing = false;
         return new IndexingResponse(true);
@@ -63,22 +63,22 @@ public class IndexingServiceImpl implements IndexingService {
 
     @Override
     public IndexingResponse indexSinglePage(String url) {
-        Site site = null;
+        SiteConfig siteConfig = null;
         boolean checkIfInConfig = false;
-        for (Site s : sitesList.getSites()) {
+        for (SiteConfig s : sitesList.getSiteConfigs()) {
             if (s.getUrl().equals(url)) {
                 checkIfInConfig = true;
-                site = new Site(s.getUrl(), s.getName());
+                siteConfig = new SiteConfig(s.getUrl(), s.getName());
             }
         }
         if (checkIfInConfig) {
-            if (checkIfIndexing(site)) {
+            if (checkIfIndexing(siteConfig.getUrl())) {
                 return new IndexingResponse(false, "Индексация уже запущена");
             }
-            deleteFromDB(site);
-            addSite(site);
-            SiteModel siteModel = siteRepository.getSiteIdByURL(site.getUrl()).get();
-            IndexingThread thread = new IndexingThread(siteModel, site, pageRepository, siteRepository, lemmaServiceImpl);
+            deleteFromDB(siteConfig);
+            addSite(siteConfig);
+            Site site = siteRepository.getSiteIdByURL(siteConfig.getUrl()).get();
+            IndexingThread thread = new IndexingThread(site, siteConfig.getUrl(), pageRepository, siteRepository, lemmaServiceImpl);
             pool.execute(thread);
             indexing = true;
             return new IndexingResponse(true);
@@ -88,28 +88,28 @@ public class IndexingServiceImpl implements IndexingService {
                         "указанных в конфигурационном файле.");
     }
 
-    private boolean checkIfIndexing(Site site) {
-        if (siteRepository.getSiteIdByURL(site.getUrl()).isPresent()) {
-             return siteRepository.getSiteIdByURL(site.getUrl()).get().getStatus().equals(Status.INDEXING);
+    private boolean checkIfIndexing(String url) {
+        if (siteRepository.getSiteIdByURL(url).isPresent()) {
+             return siteRepository.getSiteIdByURL(url).get().getStatus().equals(Status.INDEXING);
         }
         return false;
     }
 
-    private void addSite(Site site) {
-        SiteModel model = new SiteModel();
+    private void addSite(SiteConfig siteConfig) {
+        Site model = new Site();
         model.setDateTime(LocalDateTime.now());
         model.setLastError(null);
-        model.setName(site.getName());
+        model.setName(siteConfig.getName());
         model.setStatus(Status.INDEXING);
-        model.setUrl(site.getUrl());
+        model.setUrl(siteConfig.getUrl());
         siteRepository.save(model);
     }
 
-    private void deleteFromDB(Site site) {
-        if (siteRepository.getSiteIdByURL(site.getUrl()).isPresent()) {
-            if (siteRepository.getSiteIdByURL(site.getUrl()).get().getStatus().equals(Status.INDEXED) ||
-                    siteRepository.getSiteIdByURL(site.getUrl()).get().getStatus().equals(Status.FAILED))
-                siteRepository.deleteById(siteRepository.getSiteIdByURL(site.getUrl()).get().getId());
+    private void deleteFromDB(SiteConfig siteConfig) {
+        if (siteRepository.getSiteIdByURL(siteConfig.getUrl()).isPresent()) {
+            if (siteRepository.getSiteIdByURL(siteConfig.getUrl()).get().getStatus().equals(Status.INDEXED) ||
+                    siteRepository.getSiteIdByURL(siteConfig.getUrl()).get().getStatus().equals(Status.FAILED))
+                siteRepository.deleteById(siteRepository.getSiteIdByURL(siteConfig.getUrl()).get().getId());
         }
     }
 }

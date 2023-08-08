@@ -2,13 +2,13 @@ package searchengine.services;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import searchengine.config.Site;
+import searchengine.config.SiteConfig;
 import searchengine.config.SitesList;
 import searchengine.dto.statistics.DetailedStatisticsItem;
 import searchengine.dto.statistics.StatisticsData;
 import searchengine.dto.statistics.StatisticsResponse;
 import searchengine.dto.statistics.TotalStatistics;
-import searchengine.model.SiteModel;
+import searchengine.model.Site;
 import searchengine.model.Status;
 import searchengine.repositories.LemmaRepository;
 import searchengine.repositories.PageRepository;
@@ -18,7 +18,6 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
 
 @Service
 @RequiredArgsConstructor
@@ -32,35 +31,35 @@ public class StatisticsServiceImpl implements StatisticsService {
     @Override
     public StatisticsResponse getStatistics() {
         TotalStatistics total = new TotalStatistics();
-        total.setSites(sites.getSites().size());
+        total.setSites(sites.getSiteConfigs().size());
         total.setIndexing(true);
 
         List<DetailedStatisticsItem> detailed = new ArrayList<>();
-        List<Site> sitesList = sites.getSites();
+        List<SiteConfig> sitesList = sites.getSiteConfigs();
         long statusTime = System.currentTimeMillis();
         int pages = 0;
         int lemmas = 0;
         int totalPages = 0;
         int totalLemmas = 0;
-        for (Site site : sitesList) {
+        for (SiteConfig siteConfig : sitesList) {
             DetailedStatisticsItem item = new DetailedStatisticsItem();
-            item.setName(site.getName());
-            item.setUrl(site.getUrl());
-            if (siteRepository.getSiteIdByURL(site.getUrl()).isPresent()) {
-                SiteModel siteModel = siteRepository.getSiteIdByURL(site.getUrl()).get();
-                if (pageRepository.getAllBySiteId(siteModel.getId()).isPresent()) {
-                    pages = pageRepository.getAllBySiteId(siteModel.getId()).get().size();
+            item.setName(siteConfig.getName());
+            item.setUrl(siteConfig.getUrl());
+            if (siteRepository.getSiteIdByURL(siteConfig.getUrl()).isPresent()) {
+                Site site = siteRepository.getSiteIdByURL(siteConfig.getUrl()).get();
+                if (pageRepository.getAllBySiteId(site.getId()).isPresent()) {
+                    pages = pageRepository.getAllBySiteId(site.getId()).get().size();
                     totalPages += pages;
                     item.setPages(pages);
                 }
-                if (lemmaRepository.getAllBySiteId(siteModel.getId()).isPresent()) {
-                    lemmas = lemmaRepository.getAllBySiteId(siteModel.getId()).get().size();
+                if (lemmaRepository.getAllBySiteId(site.getId()).isPresent()) {
+                    lemmas = lemmaRepository.getAllBySiteId(site.getId()).get().size();
                     totalLemmas += lemmas;
                     item.setLemmas(lemmas);
                 }
-                item.setStatus(siteModel.getStatus().name());
-                item.setError(siteModel.getLastError());
-                ZonedDateTime zdt = ZonedDateTime.of(siteModel.getDateTime(), ZoneId.systemDefault());
+                item.setStatus(site.getStatus().name());
+                item.setError(site.getLastError());
+                ZonedDateTime zdt = ZonedDateTime.of(site.getDateTime(), ZoneId.systemDefault());
                 statusTime = zdt.toInstant().toEpochMilli();
             } else {
                 item.setPages(pages);

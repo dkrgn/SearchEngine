@@ -13,7 +13,7 @@ import java.util.Set;
 @Table(name = "sites")
 @AllArgsConstructor
 @NoArgsConstructor
-public class SiteModel {
+public class Site {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -44,15 +44,15 @@ public class SiteModel {
     private String name;
 
     @OneToMany(
-            mappedBy = "siteModel",
+            mappedBy = "site",
             cascade = CascadeType.ALL,
             orphanRemoval = true)
-    private Set<PageModel> pageModels;
+    private Set<Page> pages;
 
     @OneToMany(
-            mappedBy = "siteModel",
+            mappedBy = "site",
             cascade = CascadeType.ALL,
             orphanRemoval = true)
-    private Set<LemmaModel> lemmaModels;
+    private Set<Lemma> lemmata;
 
 }

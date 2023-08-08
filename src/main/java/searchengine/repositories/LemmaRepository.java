@@ -4,23 +4,23 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
-import searchengine.model.LemmaModel;
+import searchengine.model.Lemma;
 
 import javax.transaction.Transactional;
 import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface LemmaRepository extends JpaRepository<LemmaModel, Integer> {
+public interface LemmaRepository extends JpaRepository<Lemma, Integer> {
 
     @Query(value = "SELECT * FROM lemmas WHERE lemmas.site_id = :id", nativeQuery = true)
-    Optional<List<LemmaModel>> getAllBySiteId(int id);
+    Optional<List<Lemma>> getAllBySiteId(int id);
 
     @Query(value = "SELECT * FROM lemmas", nativeQuery = true)
-    Optional<List<LemmaModel>> getAll();
+    Optional<List<Lemma>> getAll();
 
     @Query(value = "SELECT * FROM lemmas WHERE lemma = :lemma", nativeQuery = true)
-    Optional<LemmaModel> getByLemma(String lemma);
+    Optional<Lemma> getByLemma(String lemma);
 
     @Transactional
     @Modifying

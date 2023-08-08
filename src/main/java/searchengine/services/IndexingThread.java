@@ -1,16 +1,13 @@
 package searchengine.services;
 
 import lombok.AllArgsConstructor;
-import lombok.RequiredArgsConstructor;
 import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.select.Elements;
-import org.springframework.stereotype.Service;
-import searchengine.config.Site;
 import searchengine.dto.statistics.IndexingResponse;
-import searchengine.model.PageModel;
-import searchengine.model.SiteModel;
+import searchengine.model.Page;
+import searchengine.model.Site;
 import searchengine.model.Status;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
@@ -19,16 +16,15 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.TreeSet;
 import java.util.concurrent.ForkJoinTask;
 import java.util.concurrent.RecursiveTask;
 
 @AllArgsConstructor
 public class IndexingThread extends RecursiveTask<IndexingResponse> {
 
-    private final SiteModel siteModel;
-
     private final Site site;
+
+    private final String passedUrl;
 
     private final PageRepository pageRepository;
 
@@ -42,41 +38,48 @@ public class IndexingThread extends RecursiveTask<IndexingResponse> {
         Connection.Response response;
         try {
             List<IndexingThread> tasks = new ArrayList<>();
-            response = Jsoup.connect(site.getUrl())
+            response = Jsoup.connect(passedUrl)
                     .timeout(3000)
                     .execute();
             Document doc = response.parse();
             Elements aTag = doc.getElementsByTag("a");
             int statusCode = response.statusCode();
             List<String> hrefs = new ArrayList<>();
-            aTag.forEach(link -> hrefs.add(link.attr("href")));
-            if (!checkIfContains(site.getUrl().substring(siteModel.getUrl().length()))) {
-                saveToDB(doc, statusCode, site.getUrl());
+            aTag.forEach(url -> hrefs.add(url.attr("href")));
+            if (!checkIfContains(passedUrl.substring(site.getUrl().length()))) {
+                saveToDB(doc, statusCode, passedUrl);
             }
-            iterateLinks(hrefs, tasks);
+            boolean isEmpty = iterateUrls(hrefs, tasks);
+            if (isEmpty) {
+                return new IndexingResponse(true);
+            }
             tasks.forEach(ForkJoinTask::join);
             return ifSucceeded(start);
         } catch (IOException e) {
-            siteRepository.changeStatusByUrl(site.getUrl(), Status.FAILED.name());
+            siteRepository.changeStatusByUrl(passedUrl, Status.FAILED.name());
+            siteRepository.setLastError(e.getMessage(), site.getId());
             System.err.println(e.getMessage());
             throw new RuntimeException(e);
         }
     }
 
-    private void saveToDB(Document doc, int statusCode, String link) {
-        PageModel page = buildPage(doc, statusCode, link);
+    private void saveToDB(Document doc, int statusCode, String url) {
+        Page page = buildPage(doc, statusCode, url);
         pageRepository.save(page);
-        lemmaServiceImpl.buildLemmas(page.getContent(), page, siteModel);
-        siteRepository.updateDateTime(siteModel.getId(), LocalDateTime.now());
+        lemmaServiceImpl.buildLemmas(page.getContent(), page, site);
+        siteRepository.updateDateTime(site.getId(), LocalDateTime.now());
     }
 
-    private void iterateLinks(List<String> hrefs, List<IndexingThread> tasks) {
-        for (String link : filterHrefs(hrefs)) {
-            if (checkIfContains(link)) {
+    private boolean iterateUrls(List<String> hrefs, List<IndexingThread> tasks) {
+        int i = 0;
+        for (String url : filterHrefs(hrefs)) {
+            if (checkIfContains(url)) {
+                i++;
                 continue;
             }
-            indexPageAndLemmas(tasks, link);
+            startNewThread(tasks, url);
         }
+        return i == filterHrefs(hrefs).size();
     }
 
     private List<String> filterHrefs(List<String> hrefs) {
@@ -89,42 +92,41 @@ public class IndexingThread extends RecursiveTask<IndexingResponse> {
         return filtered;
     }
 
-    private boolean checkIfContains(String link) {
-        return pageRepository.getByPathAndId(link, siteModel.getId()).isPresent();
+    private boolean checkIfContains(String url) {
+        return pageRepository.getByPathAndId(url, site.getId()).isPresent();
     }
 
-    private String ifStartsWithSlash(String link) {
-        return link.startsWith("/")  && link.length() > 1 ? siteModel.getUrl() + link : link;
+    private String ifStartsWithSlash(String url) {
+        return url.startsWith("/")  && url.length() > 1 ? site.getUrl() + url : url;
     }
 
-    private void indexPageAndLemmas(List<IndexingThread> tasks, String link) {
-        Site site = new Site();
-        site.setName(Thread.currentThread().getName());
-        site.setUrl(ifStartsWithSlash(link));
-        IndexingThread indexingThread = new IndexingThread(siteModel, site, pageRepository, siteRepository, lemmaServiceImpl);
+    private void startNewThread(List<IndexingThread> tasks, String url) {
+        IndexingThread indexingThread = new IndexingThread(site, ifStartsWithSlash(url), pageRepository, siteRepository, lemmaServiceImpl);
         indexingThread.fork();
         tasks.add(indexingThread);
     }
 
-    private PageModel buildPage(Document doc, int status, String path) {
-        PageModel pageModel = new PageModel();
-        pageModel.setCode(status);
-        pageModel.setContent(doc.html());
+    private Page buildPage(Document doc, int status, String path) {
+        Page page = new Page();
+        page.setCode(status);
+        page.setContent(doc.html());
         if (path.equals("/")) {
-            pageModel.setPath(path);
+            page.setPath(path);
         } else {
-            pageModel.setPath(path.substring(siteModel.getUrl().length()));
+            page.setPath(path.substring(site.getUrl().length()));
         }
-        pageModel.setSiteModel(siteModel);
-        return pageModel;
+        page.setSite(site);
+        return page;
     }
 
     private IndexingResponse ifSucceeded(long start) {
         if (pageRepository.getAll().isPresent()) {
-            System.err.println(System.currentTimeMillis() - start);
+            System.err.println("EXECUTED: " + (System.currentTimeMillis() - start));
             siteRepository.changeStatusByUrl(site.getUrl(), Status.INDEXED.name());
             return new IndexingResponse(true);
         }
+        siteRepository.changeStatusByUrl(passedUrl, Status.FAILED.name());
+        siteRepository.setLastError("Ошибка индексации", site.getId());
         return new IndexingResponse(false, "Ошибка индексации");
     }
 }

@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 @ToString
 @AllArgsConstructor
 @NoArgsConstructor
-public class Site {
+public class SiteConfig {
     private String url;
     private String name;
 }

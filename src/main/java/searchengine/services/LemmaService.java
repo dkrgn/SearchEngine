@@ -1,10 +1,10 @@
 package searchengine.services;
 
-import searchengine.model.PageModel;
-import searchengine.model.SiteModel;
+import searchengine.model.Page;
+import searchengine.model.Site;
 
 
 public interface LemmaService {
 
-    void buildLemmas(String content, PageModel pageModel, SiteModel site);
+    void buildLemmas(String content, Page page, Site site);
 }

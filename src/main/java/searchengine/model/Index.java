@@ -11,7 +11,7 @@ import javax.validation.constraints.NotNull;
 @Table(name = "indices")
 @NoArgsConstructor
 @AllArgsConstructor
-public class IndexModel {
+public class Index {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -22,14 +22,14 @@ public class IndexModel {
             name = "page_id",
             nullable = false,
             referencedColumnName = "id")
-    private PageModel pageModel;
+    private Page page;
 
     @ManyToOne
     @JoinColumn(
             name = "lemma_id",
             nullable = false,
             referencedColumnName = "id")
-    private LemmaModel lemmaModel;
+    private Lemma lemma;
 
     @NotNull
     private Float ranking;
