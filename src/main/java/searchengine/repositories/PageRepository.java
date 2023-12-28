@@ -19,4 +19,16 @@ public interface PageRepository extends JpaRepository<Page, Integer> {
 
     @Query(value = "SELECT * FROM pages WHERE path = :path AND site_id = :siteId", nativeQuery = true)
     Optional<Page> getByPathAndId(String path, int siteId);
+
+    @Query(value = "SELECT * FROM pages WHERE id = :id", nativeQuery = true)
+    Optional<Page> getByPageId(int id);
+
+    @Query(value = "SELECT p.id, p.path, p.code, p.content, p.site_id " +
+            "FROM pages AS p " +
+            "INNER JOIN indices AS i " +
+            "ON i.page_id = p.id = i.page_id " +
+            "INNER JOIN lemmas AS l " +
+            "ON i.lemma_id = l.id " +
+            "WHERE lemma_id = :id", nativeQuery = true)
+    Optional<List<Page>> getByLemma(int id);
 }

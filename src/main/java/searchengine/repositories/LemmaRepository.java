@@ -26,4 +26,7 @@ public interface LemmaRepository extends JpaRepository<Lemma, Integer> {
     @Modifying
     @Query(value = "UPDATE lemmas SET frequency = frequency + 1 WHERE lemma = :lemma", nativeQuery = true)
     void updateFrequency(String lemma);
+
+    @Query(value = "SELECT MAX(frequency) FROM lemmas", nativeQuery = true)
+    Optional<Integer> getHighestFrequency();
 }

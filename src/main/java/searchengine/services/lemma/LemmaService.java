@@ -1,4 +1,4 @@
-package searchengine.services;
+package searchengine.services.lemma;
 
 import searchengine.model.Page;
 import searchengine.model.Site;

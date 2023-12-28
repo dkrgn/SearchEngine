@@ -10,7 +10,7 @@ import java.util.Set;
 @Getter
 @Setter
 @Entity
-@Table(name = "pages", indexes = @javax.persistence.Index(name = "path_index", columnList = "path"))
+@Table(name = "pages", indexes = @javax.persistence.Index(name = "path_index", columnList = "path, site_id", unique = true))
 @AllArgsConstructor
 @NoArgsConstructor
 public class Page {

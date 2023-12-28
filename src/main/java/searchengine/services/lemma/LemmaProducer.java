@@ -1,5 +1,6 @@
-package searchengine.services;
+package searchengine.services.lemma;
 
+import lombok.AllArgsConstructor;
 import org.apache.lucene.morphology.LuceneMorphology;
 import org.apache.lucene.morphology.russian.RussianLuceneMorphology;
 import org.springframework.stereotype.Service;
@@ -9,6 +10,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
+@AllArgsConstructor
 public class LemmaProducer {
 
     private static LuceneMorphology morphology;

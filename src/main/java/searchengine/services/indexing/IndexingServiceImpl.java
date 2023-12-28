@@ -1,14 +1,15 @@
-package searchengine.services;
+package searchengine.services.indexing;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import searchengine.config.SiteConfig;
 import searchengine.config.SitesList;
-import searchengine.dto.statistics.IndexingResponse;
+import searchengine.dto.indexing.IndexingResponse;
 import searchengine.model.Site;
 import searchengine.model.Status;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
+import searchengine.services.lemma.LemmaServiceImpl;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -56,7 +57,10 @@ public class IndexingServiceImpl implements IndexingService {
         }
         pool.shutdown();
         sitesList.getSiteConfigs().forEach(
-                s -> siteRepository.changeStatusByUrl(s.getUrl(), Status.FAILED.name()));
+                s -> {
+                    siteRepository.changeStatusByUrl(s.getUrl(), Status.FAILED.name());
+                    siteRepository.setLastError("Индексация остановлена", siteRepository.getSiteIdByURL(s.getUrl()).get().getId());
+                });
         indexing = false;
         return new IndexingResponse(true);
     }

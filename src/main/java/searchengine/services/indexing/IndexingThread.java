@@ -1,26 +1,29 @@
-package searchengine.services;
+package searchengine.services.indexing;
 
 import lombok.AllArgsConstructor;
 import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.select.Elements;
-import searchengine.dto.statistics.IndexingResponse;
+import searchengine.dto.indexing.IndexingResponse;
 import searchengine.model.Page;
 import searchengine.model.Site;
 import searchengine.model.Status;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
+import searchengine.services.lemma.LemmaServiceImpl;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ForkJoinTask;
+import java.util.concurrent.RecursiveAction;
 import java.util.concurrent.RecursiveTask;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @AllArgsConstructor
-public class IndexingThread extends RecursiveTask<IndexingResponse> {
+public class IndexingThread extends RecursiveAction {
 
     private final Site site;
 
@@ -32,8 +35,10 @@ public class IndexingThread extends RecursiveTask<IndexingResponse> {
 
     private final LemmaServiceImpl lemmaServiceImpl;
 
+    private static final int THRESHOLD = 2000;
+
     @Override
-    protected IndexingResponse compute() {
+    protected void compute() {
         long start = System.currentTimeMillis();
         Connection.Response response;
         try {
@@ -49,12 +54,10 @@ public class IndexingThread extends RecursiveTask<IndexingResponse> {
             if (!checkIfContains(passedUrl.substring(site.getUrl().length()))) {
                 saveToDB(doc, statusCode, passedUrl);
             }
-            boolean isEmpty = iterateUrls(hrefs, tasks);
-            if (isEmpty) {
-                return new IndexingResponse(true);
+            iterateUrls(hrefs, tasks);
+            if (pageRepository.getAllBySiteId(site.getId()).get().size() >= THRESHOLD) {
+                siteRepository.changeStatusByUrl(site.getUrl(), Status.INDEXED.name());
             }
-            tasks.forEach(ForkJoinTask::join);
-            return ifSucceeded(start);
         } catch (IOException e) {
             siteRepository.changeStatusByUrl(passedUrl, Status.FAILED.name());
             siteRepository.setLastError(e.getMessage(), site.getId());
@@ -70,16 +73,13 @@ public class IndexingThread extends RecursiveTask<IndexingResponse> {
         siteRepository.updateDateTime(site.getId(), LocalDateTime.now());
     }
 
-    private boolean iterateUrls(List<String> hrefs, List<IndexingThread> tasks) {
-        int i = 0;
+    private void iterateUrls(List<String> hrefs, List<IndexingThread> tasks) {
         for (String url : filterHrefs(hrefs)) {
             if (checkIfContains(url)) {
-                i++;
                 continue;
             }
             startNewThread(tasks, url);
         }
-        return i == filterHrefs(hrefs).size();
     }
 
     private List<String> filterHrefs(List<String> hrefs) {
@@ -119,14 +119,14 @@ public class IndexingThread extends RecursiveTask<IndexingResponse> {
         return page;
     }
 
-    private IndexingResponse ifSucceeded(long start) {
-        if (pageRepository.getAll().isPresent()) {
-            System.err.println("EXECUTED: " + (System.currentTimeMillis() - start));
-            siteRepository.changeStatusByUrl(site.getUrl(), Status.INDEXED.name());
-            return new IndexingResponse(true);
-        }
-        siteRepository.changeStatusByUrl(passedUrl, Status.FAILED.name());
-        siteRepository.setLastError("Ошибка индексации", site.getId());
-        return new IndexingResponse(false, "Ошибка индексации");
-    }
+//    private IndexingResponse ifSucceeded(long start) {
+//        if (pageRepository.getAll().isPresent()) {
+//            System.err.println("EXECUTED: " + (System.currentTimeMillis() - start));
+//            siteRepository.changeStatusByUrl(site.getUrl(), Status.INDEXED.name());
+//            return new IndexingResponse(true);
+//        }
+//        siteRepository.changeStatusByUrl(passedUrl, Status.FAILED.name());
+//        siteRepository.setLastError("Ошибка индексации", site.getId());
+//        return new IndexingResponse(false, "Ошибка индексации");
+//    }
 }

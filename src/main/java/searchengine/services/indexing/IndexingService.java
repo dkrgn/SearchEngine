@@ -1,8 +1,6 @@
-package searchengine.services;
+package searchengine.services.indexing;
 
-import searchengine.dto.statistics.IndexingResponse;
-
-import java.util.List;
+import searchengine.dto.indexing.IndexingResponse;
 
 public interface IndexingService {
 
