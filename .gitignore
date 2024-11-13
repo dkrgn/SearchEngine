@@ -39,3 +39,4 @@ build/
 
 # Documentation
 /src/main/resources/pdfs
+/src/main/resources/static

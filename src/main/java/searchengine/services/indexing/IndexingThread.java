@@ -40,29 +40,31 @@ public class IndexingThread extends RecursiveAction {
     @Override
     protected void compute() {
         long start = System.currentTimeMillis();
-        Connection.Response response;
-        try {
-            List<IndexingThread> tasks = new ArrayList<>();
-            response = Jsoup.connect(passedUrl)
-                    .timeout(3000)
-                    .execute();
-            Document doc = response.parse();
-            Elements aTag = doc.getElementsByTag("a");
-            int statusCode = response.statusCode();
-            List<String> hrefs = new ArrayList<>();
-            aTag.forEach(url -> hrefs.add(url.attr("href")));
-            if (!checkIfContains(passedUrl.substring(site.getUrl().length()))) {
-                saveToDB(doc, statusCode, passedUrl);
+        while (!IndexingServiceImpl.stop.get()) {
+            Connection.Response response;
+            try {
+                List<IndexingThread> tasks = new ArrayList<>();
+                response = Jsoup.connect(passedUrl)
+                        .timeout(3000)
+                        .execute();
+                Document doc = response.parse();
+                Elements aTag = doc.getElementsByTag("a");
+                int statusCode = response.statusCode();
+                List<String> hrefs = new ArrayList<>();
+                aTag.forEach(url -> hrefs.add(url.attr("href")));
+                if (!checkIfContains(passedUrl.substring(site.getUrl().length()))) {
+                    saveToDB(doc, statusCode, passedUrl);
+                }
+                iterateUrls(hrefs, tasks);
+                if (pageRepository.getAllBySiteId(site.getId()).get().size() >= THRESHOLD) {
+                    siteRepository.changeStatusByUrl(site.getUrl(), Status.INDEXED.name());
+                }
+            } catch (IOException e) {
+                siteRepository.changeStatusByUrl(passedUrl, Status.FAILED.name());
+                siteRepository.setLastError(e.getMessage(), site.getId());
+                System.err.println(e.getMessage());
+                throw new RuntimeException(e);
             }
-            iterateUrls(hrefs, tasks);
-            if (pageRepository.getAllBySiteId(site.getId()).get().size() >= THRESHOLD) {
-                siteRepository.changeStatusByUrl(site.getUrl(), Status.INDEXED.name());
-            }
-        } catch (IOException e) {
-            siteRepository.changeStatusByUrl(passedUrl, Status.FAILED.name());
-            siteRepository.setLastError(e.getMessage(), site.getId());
-            System.err.println(e.getMessage());
-            throw new RuntimeException(e);
         }
     }
 
