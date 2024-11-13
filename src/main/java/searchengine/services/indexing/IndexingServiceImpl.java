@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
 @RequiredArgsConstructor
@@ -31,6 +32,8 @@ public class IndexingServiceImpl implements IndexingService {
     private final SitesList sitesList;
 
     private boolean indexing = false;
+
+    public static final AtomicBoolean stop = new AtomicBoolean(false);
 
     @Override
     public IndexingResponse startIndex() {
@@ -53,9 +56,10 @@ public class IndexingServiceImpl implements IndexingService {
     @Override
     public IndexingResponse stopIndex() {
         if (!indexing) {
-            return new IndexingResponse(false, "Индексация уже запущена");
+            return new IndexingResponse(false, "Индексация не запущена");
         }
-        pool.shutdown();
+        stop.set(true);
+        pool.shutdownNow();
         sitesList.getSiteConfigs().forEach(
                 s -> {
                     siteRepository.changeStatusByUrl(s.getUrl(), Status.FAILED.name());

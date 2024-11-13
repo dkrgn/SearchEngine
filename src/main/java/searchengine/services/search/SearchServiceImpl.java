@@ -45,23 +45,35 @@ public class SearchServiceImpl implements SearchService {
             throw new RuntimeException(e);
         }
         LinkedList<Lemma> sortedLemmas = buildLemmas(lemmaProducer.getLemmas(query).keySet());
+        if (sortedLemmas.isEmpty()) {
+            return new SearchResponse(false, "Страниц с заданным запросом не найдено");
+        }
         LinkedHashMap<Lemma, List<Page>> pages = getFilteredPagesFromLemmas(sortedLemmas);
+        if (pages.isEmpty()) {
+            return new SearchResponse(false, "Страниц с заданным запросом не найдено");
+        }
         LinkedHashMap<Lemma, List<Float>> ranks = fillEmpty(getRankings(pages));
         LinkedList<Float> relRanking = getRelativeR(getAbsRanking(ranks));
-        return buildSearchResponse(aggrPagesAndRels(relRanking, pages.values().iterator().next()));
+        return buildSearchResponse(aggrPagesAndRels(relRanking, pages.values().iterator().next()), query, limit);
     }
 
     private LinkedList<Lemma> buildLemmas(Set<String> queries) {
-        int max = lemmaRepository.getHighestFrequency().get();
-        return queries.stream()
-                .map(q -> lemmaRepository.getByLemma(q).orElse(new Lemma()))
-                .filter(q -> q.getFrequency() != null && q.getFrequency() < max * 0.9)
-                .sorted((o1, o2) -> {
-                    int v1 = o1.getFrequency();
-                    int v2 = o2.getFrequency();
-                    return Integer.compare(v1, v2);
-                })
-                .collect(toCollection(LinkedList::new));
+        if (queries.size() > 1) {
+            int max = lemmaRepository.getHighestFrequency().get();
+            return queries.stream()
+                    .map(q -> lemmaRepository.getByLemma(q).orElse(new Lemma()))
+                    .filter(q -> q.getFrequency() != null && q.getFrequency() < max * 0.9)
+                    .sorted((o1, o2) -> {
+                        int v1 = o1.getFrequency();
+                        int v2 = o2.getFrequency();
+                        return Integer.compare(v1, v2);
+                    })
+                    .collect(toCollection(LinkedList::new));
+        } else {
+            return queries.stream()
+                    .map(q -> lemmaRepository.getByLemma(q).orElse(new Lemma()))
+                    .collect(toCollection(LinkedList::new));
+        }
     }
 
     private LinkedHashMap<Lemma, List<Page>> getFilteredPagesFromLemmas(List<Lemma> sortedLemmas) {
@@ -134,7 +146,7 @@ public class SearchServiceImpl implements SearchService {
                 ));
     }
 
-    private SearchResponse buildSearchResponse(LinkedHashMap<Page, Float> rels) {
+    private SearchResponse buildSearchResponse(LinkedHashMap<Page, Float> rels, String query, int limit) {
         List<DetailedSearchResponse> list = new ArrayList<>();
         for (Map.Entry<Page, Float> entry : rels.entrySet()) {
             if (siteRepository.getSiteById(entry.getKey().getSite().getId()).isPresent()) {
@@ -142,17 +154,18 @@ public class SearchServiceImpl implements SearchService {
                 Site site = siteRepository.getSiteById(entry.getKey().getSite().getId()).get();
                 detailedSearchResponse.setSiteUrl(site.getUrl());
                 detailedSearchResponse.setSiteName(site.getName());
-                detailedSearchResponse.setPageUri(entry.getKey().getPath());
+                detailedSearchResponse.setPageUri(entry.getKey().getPath().isEmpty() ? "/" : entry.getKey().getPath());
                 detailedSearchResponse.setPageTitle(xmlParser.getTitle(entry.getKey().getContent()));
-                detailedSearchResponse.setSnippet(getPageSnippet(entry.getKey()));
+                detailedSearchResponse.setSnippet(getPageSnippet(entry.getKey(), query));
                 detailedSearchResponse.setRelevance(entry.getValue());
                 list.add(detailedSearchResponse);
             }
         }
-        return new SearchResponse(true, rels.size(), list);
+        return limit < list.size() ? new SearchResponse(true, rels.size(), list.subList(0, limit))
+                : new SearchResponse(true, rels.size(), list);
     }
 
-    private String getPageSnippet(Page page) {
-        return "";
+    private String getPageSnippet(Page page, String query) {
+        return xmlParser.parseContent(page.getContent(), query);
     }
 }
