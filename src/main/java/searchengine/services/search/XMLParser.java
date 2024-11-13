@@ -22,6 +22,7 @@ public class XMLParser {
         title = title.replaceAll("<title>","");
         title = title.replaceAll("</title>", "");
         return title;
+        //for testing branch 2
     }
 
     public String parseContent(String content, String query) {
